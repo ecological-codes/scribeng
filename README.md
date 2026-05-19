@@ -63,6 +63,10 @@ Directives use the following section headers with numbered lists:
 - **[RULES]** - enforceable constraints applied at runtime.
 - **[ACTIONS]** - autonomous steps agent executes in normal workflow.
 
+## References
+
+- Inspired by [https://github.com/entireio](https://github.com/entireio)
+
 ## License
 
 See [LICENSE](./LICENSE). (C) Copyright 2026 - Sameer Khan
