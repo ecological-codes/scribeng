@@ -1,0 +1,66 @@
+name: Build .skill archive
+
+on:
+  push:
+    branches: [trunk]
+    paths-ignore:
+      - '*.skill'
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delay
+        run: sleep 30
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build .skill
+        run: |
+          SKILL_NAME=$(basename "$GITHUB_WORKSPACE")
+          cp -r "$GITHUB_WORKSPACE" "/tmp/${SKILL_NAME}"
+          rm -rf "/tmp/${SKILL_NAME}/.github"
+          rm -f "$GITHUB_WORKSPACE/${SKILL_NAME}.skill"
+          cd /tmp
+          zip -r "$GITHUB_WORKSPACE/${SKILL_NAME}.skill" "${SKILL_NAME}/" \
+            -x "${SKILL_NAME}/.git/*" \
+            -x "${SKILL_NAME}/*.skill" \
+            -x "${SKILL_NAME}/evals/*" \
+            -x "${SKILL_NAME}/__pycache__/*" \
+            -x "${SKILL_NAME}/node_modules/*" \
+            -x "${SKILL_NAME}/.DS_Store" \
+            -x "*.pyc"
+
+      - name: Verify archive
+        run: |
+          SKILL_NAME=$(basename "$GITHUB_WORKSPACE")
+          echo "=== contents ==="
+          unzip -l "${SKILL_NAME}.skill"
+          echo "=== excluded check ==="
+          unzip -l "${SKILL_NAME}.skill" \
+            | grep -E '__pycache__|node_modules|\.pyc$|\.DS_Store|\.git/|\.github/|/evals/' \
+            && { echo "FAIL — excluded files in archive"; exit 1; } \
+            || echo "clean"
+
+      - name: Commit and push
+        run: |
+          SKILL_NAME=$(basename "$GITHUB_WORKSPACE")
+          VERSION=$(grep -m1 'version:' SKILL.md | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+          DATETIME=$(date -u '+%Y-%m-%dT%H%M%SZ')
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${SKILL_NAME}.skill"
+          git diff --cached --quiet \
+            && echo "no change — skip commit" \
+            || git commit \
+                 --message "build: ${SKILL_NAME} v${VERSION} ${DATETIME} [skip ci]" \
+                 --trailer "Signed-off-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+          git push
