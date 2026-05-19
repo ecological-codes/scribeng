@@ -1,6 +1,6 @@
 ---
 name: scribeng
-version: 1.1.0
+version: 1.2.0
 scope: session, agent
 parent: captureng, agent.md §1
 description: Agent scribe for claude.ai web sessions. Triggers on "capture session with scribeng", "write session to Entire checkpoint", after a git commit when Entire is enabled and session logging is desired. Two modes: checkpoint (metadata envelope, Entire-compatible, default) and sessionlog (--full-log, full turn-by-turn flux record from session start).
@@ -80,6 +80,7 @@ Where `cid` = first 12 hex chars of the commit SHA on `entire/checkpoints/v1` fo
   "files_touched": ["<file1>", "<file2>"],
   "agent": "claude-ai-web",
   "model": "<model_string>",
+  "session_intent": "<first bullet of captureng §1 Knowledge Summary, or first user message>",
   "turn_id": "<first_12_chars_of_sha1_of_session_id>",
   "initial_attribution": {
     "calculated_at": "<ISO8601_UTC>",
@@ -107,8 +108,8 @@ Where `cid` = first 12 hex chars of the commit SHA on `entire/checkpoints/v1` fo
    - `session_id`: session name (e.g. `s08`)
    - `model`: current model string (e.g. `claude-sonnet-4-6`)
    - `created_at`: session start datetime (UTC ISO8601)
-   - `first_prompt`: first user message of session
    - `working_branch`: `git branch --show-current` on target repo
+   - `session_intent`: if a captureng checkpoint exists for this session, read the first bullet of §1 Knowledge Summary. Fallback: first user message of session.
 
 2. **Derive files_touched** from git diff between the linked commit and its parent:
    ```bash
@@ -133,26 +134,32 @@ Where `cid` = first 12 hex chars of the commit SHA on `entire/checkpoints/v1` fo
 
 7. **Create checkpoint directory and write JSON files**:
    ```bash
-   CID_PREFIX=$(echo "<will_be_determined_after_commit>" )
-   # Use a deterministic placeholder: sha1 of session_id + HEAD SHA, first 12 chars
-   CID=$(echo -n "<session_id><head_sha>" | sha1sum | cut -c1-12)
+   # Deterministic CID: blake3(session_id + created_at + head_sha), first 16 chars
+   CID=$(echo -n "<session_id><created_at><head_sha>" | b3sum | cut -c1-16)
    mkdir -p ${CID:0:2}/${CID:2}/0
    ```
-   Write `metadata.json` (session-level) and `0/metadata.json` (incremental) with values from steps 1-4.
+   Write `metadata.json` (session-level) and `0/metadata.json` (incremental) with values from steps 1-5. Include `session_intent` in `0/metadata.json`.
 
 8. **Commit to checkpoints branch**:
    ```bash
-   git add .
-   git commit -m "Checkpoint: ${CID}" -m "session: <session_id> branch: <working_branch>"
+   git commit \
+     --message "Checkpoint: ${CID}" \
+     --message "session: <session_id> branch: <working_branch>" \
+     --trailer "Signed-off-by: claude-subagent <claude-subagent@users.noreply.github.com>"
    ```
 
-9. **Return to working branch**:
+8a. **Return to working branch and add trailer commit** (makes checkpoint discoverable via `entire checkpoint list`):
    ```bash
    git checkout <working_branch>
+   git commit --allow-empty \
+     --message "<working_branch>: link checkpoint <CID>" \
+     --trailer "Entire-Checkpoint: <CID>" \
+     --trailer "Signed-off-by: claude-subagent <claude-subagent@users.noreply.github.com>"
    ```
+   Without this step, the checkpoint exists on the branch but is invisible to the Entire CLI and any compatible viewer.
 
-10. **Push if PAT available**:
-    Push `entire/checkpoints/v1` to remote using GIT_ASKPASS pattern. If no PAT, surface: "Checkpoint committed locally. Push entire/checkpoints/v1 to remote when PAT available."
+9. **Push if PAT available**:
+    Push both `entire/checkpoints/v1` and working branch to remote using GIT_ASKPASS pattern. If no PAT, surface: "Checkpoint committed locally. Push entire/checkpoints/v1 and <working_branch> to remote when PAT available."
 
 ---
 
@@ -226,4 +233,4 @@ The transcript blob is committed alongside `metadata.json` on `entire/checkpoint
 
 ---
 
-*scribeng-SKILL.md v1.1.0*
+*scribeng-SKILL.md v1.2.0*
