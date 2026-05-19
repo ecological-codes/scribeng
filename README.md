@@ -35,7 +35,7 @@ Two `metadata.json` files committed to `entire/checkpoints/v1`, compatible with 
 {cid[0:2]}/{cid[2:]}/0/metadata.json     # incremental checkpoint
 ```
 
-Where `cid` = first 12 hex chars of the checkpoint commit SHA. Format reverse-engineered from `entire` v0.6.1 (s08, 2026-05-18).
+Where `cid` = first 16 hex chars of `blake3(session_id + created_at + head_sha)` - a deterministic, content-addressable identifier derived from the session, its start time, and the HEAD commit it is linked to. This format was derived from `entire` v0.6.1 (2026-05-18).
 
 ## What It Does Not Do
 
@@ -43,18 +43,23 @@ Where `cid` = first 12 hex chars of the checkpoint commit SHA. Format reverse-en
 - Does not capture full transcript text (use `export-memories` for that)
 - Does not require Entire auth or keyring
 - Does not replace `captureng` - use both together
+- Has not been tested on AI-enabled platform+harness+model systems other than claude.ai web - adaptations for other systems are welcome from the wider ecosystem
 
 ## Peer Skills
 
+- **[prompteng](https://github.com/ecological-codes/prompteng)** - core prompt engineering config; session init framework scribeng operates within
 - **[captureng](https://github.com/ecological-codes/captureng)** - in-session state snapshot; use alongside scribeng
-- **[export-memories](https://github.com/ecological-codes/captureng)** - cross-session transcript synthesis
-- **[agent.md](https://github.com/ecological-codes/user-prefs/blob/trunk/agent.md)** - session init; provides session_id, datetime, model context scribeng depends on
+- **[packageng](https://github.com/ecological-codes/packageng)** - `.skill` file validation + packaging
+- **[safe-skill-creator](https://github.com/ecological-codes/safe-skill-creator)** - skill design + iteration
+- **[export-memories](https://github.com/ecological-codes/export-memories)** - cross-session transcript synthesis
 
 ## Prerequisites
 
 1. `entire enable` run in the target repo (`entire/checkpoints/v1` branch must exist)
 2. At least one commit on the working branch to link the checkpoint to
 3. `git-init-session.sh` sourced if push to remote is needed (GIT_ASKPASS pattern)
+4. `b3sum` available for CID generation (`apt-get install -y b3sum`)
+5. **[agent.md](https://github.com/ecological-codes/user-prefs/blob/trunk/agent.md)** loaded - provides `session_id`, datetime, and model context scribeng depends on
 
 ## Style Convention
 
