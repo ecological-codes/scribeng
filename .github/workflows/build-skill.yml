@@ -3,8 +3,10 @@ name: Build .skill archive
 on:
   push:
     branches: [trunk]
-    paths-ignore:
-      - '*.skill'
+    paths:
+      - 'SKILL.md'
+      - '*-SKILL.md'
+      - 'evals/**'
 
 permissions:
   contents: write
