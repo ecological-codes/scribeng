@@ -7,7 +7,7 @@ description: >
   (metadata envelope, Entire-compatible, default) and sessionlog (--full-log,
   full turn-by-turn flux record).
 metadata:
-  version: "1.2.0"
+  version: "1.2.1"
   parent: "captureng, agent.md §1"
 ---
 

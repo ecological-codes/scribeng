@@ -1,6 +1,6 @@
 ---
 name: scribeng
-version: 1.2.0
+version: 1.2.1
 scope: session, agent
 parent: captureng, agent.md §1
 description: Agent scribe for claude.ai web sessions. Triggers on "capture session with scribeng", "write session to Entire checkpoint", after a git commit when Entire is enabled and session logging is desired. Two modes: checkpoint (metadata envelope, Entire-compatible, default) and sessionlog (--full-log, full turn-by-turn flux record from session start).
@@ -173,9 +173,11 @@ Error during git operations (branch not found, dirty working tree): halt, surfac
 
 ## Sessionlog Mode (Full Flux Capture)
 
-Activated by `--full-log` or `activate sessionlog` at session start. The agent writes its own R history incrementally to `/home/claude/session-log.jsonl` from the first response onward. At checkpoint time, the log file is embedded as a blob in the `entire/checkpoints/v1` commit.
+Activated by `--full-log` or `activate sessionlog` at any point in the session. The agent writes its own R history incrementally to `/home/claude/session-log.jsonl` from the activation turn onward. At checkpoint time, the log file is embedded as a blob in the `entire/checkpoints/v1` commit.
 
-**Why incremental over retrospective:** the full transcript lives in Ψ (the platform's storage). Selective tier channels (`conversation_search`, `recent_chats`) are flux-bounded - they return snippets, not verbatim content. Retroactive full retrieval is structurally impossible through these channels. Incremental capture from session start is the only zero-loss path.
+Mid-session activation is explicitly valid. Turns prior to activation are not captured by this channel - use `export-memories` for retrospective coverage of pre-activation turns. Forward capture from activation point is sufficient and valuable independently.
+
+**Why incremental over retrospective:** the full transcript lives in Ψ (the platform's storage). Selective tier channels (`conversation_search`, `recent_chats`) are flux-bounded - they return snippets, not verbatim content. Retroactive full retrieval is structurally impossible through these channels. Incremental forward capture is the only zero-loss path from activation onward.
 
 ### Trigger
 
@@ -184,6 +186,8 @@ Activated by `--full-log` or `activate sessionlog` at session start. The agent w
 1. Trigger phrases (case-insensitive): `activate sessionlog`, `--full-log`, `enable full log`. Scope: remainder of session.
 1. When active, include `sessionlog: active` in all sub-agent handoff contexts. Sub-agents receiving this token must continue appending to the log before any output.
 1. Agent must not skip append steps to save tokens. Logging is non-negotiable when sessionlog is active.
+1. Each append is a mandatory bash_tool call - not optional prose. Omitting it loses the event permanently. Skipping is a spec violation.
+1. Append failure (bash_tool error, disk full, path missing): emit `⚠️ sessionlog append failed: [error]` inline. Do not silently continue. Attempt recovery (recreate file if missing); resume appending next turn.
 
 ### Log Format
 
@@ -191,6 +195,7 @@ JSONL, one object per event, appended to `/home/claude/session-log.jsonl`.
 
 ```jsonl
 {"event":"session_start","session_id":"<id>","model":"<model>","datetime":"<ISO8601>","first_prompt":"<text>"}
+{"event":"session_gap","turns_missed":<int>,"reason":"activated at turn N; prior turns not captured","datetime":"<ISO8601>"}
 {"event":"user_turn","turn":1,"content":"<verbatim user message>","datetime":"<ISO8601>"}
 {"event":"agent_turn","turn":1,"content":"<verbatim agent response>","datetime":"<ISO8601>"}
 {"event":"tool_call","turn":1,"tool":"<name>","input":"<summary or full>","output":"<summary or full>","datetime":"<ISO8601>"}
@@ -200,11 +205,11 @@ JSONL, one object per event, appended to `/home/claude/session-log.jsonl`.
 
 **[ACTIONS]**
 
-1. On `activate sessionlog` / `--full-log` trigger: create `/home/claude/session-log.jsonl`; write `session_start` event before next response.
-1. After each user message: append `user_turn` event.
-1. After each agent response: append `agent_turn` event with response summary (full text if context allows; summary if token pressure).
-1. After each tool call: append `tool_call` event.
-1. After each file write tracked in registry: append `file_write` event.
+1. On trigger: create `/home/claude/session-log.jsonl`; write `session_start` event. If activated mid-session (turn > 1): immediately write `session_gap` event with `turns_missed` = number of prior turns not captured.
+1. After each user message: append `user_turn` event via bash_tool.
+1. After composing agent response, before delivering: append `agent_turn` event via bash_tool.
+1. After each tool call: append `tool_call` event via bash_tool.
+1. After each file write tracked in registry: append `file_write` event via bash_tool.
 1. At checkpoint time (scribeng triggered): write `session_end` event; read log; embed as `session-log.jsonl` blob alongside `0/metadata.json` in `entire/checkpoints/v1` commit; add `"transcript_file": "/<cid[0:2]>/<cid[2:]>/0/session-log.jsonl"` to `0/metadata.json`.
 
 ### Updated `0/metadata.json` when sessionlog active
@@ -233,4 +238,4 @@ The transcript blob is committed alongside `metadata.json` on `entire/checkpoint
 
 ---
 
-*scribeng-SKILL.md v1.2.0*
+*scribeng-SKILL.md v1.2.1*
