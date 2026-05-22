@@ -135,7 +135,9 @@ Where `cid` = first 12 hex chars of the commit SHA on `entire/checkpoints/v1` fo
 7. **Create checkpoint directory and write JSON files**:
    ```bash
    # Deterministic CID: blake3(session_id + created_at + head_sha), first 16 chars
-   CID=$(echo -n "<session_id><created_at><head_sha>" | b3sum | cut -c1-16)
+   # Fallback: md5sum if b3sum absent (change-detection only; emit hash_algo="md5" in file_write events)
+   CID=$(echo -n "<session_id><created_at><head_sha>" | b3sum | cut -c1-16 2>/dev/null \
+     || echo -n "<session_id><created_at><head_sha>" | md5sum | cut -c1-16)
    mkdir -p ${CID:0:2}/${CID:2}/0
    ```
    Write `metadata.json` (session-level) and `0/metadata.json` (incremental) with values from steps 1-5. Include `session_intent` in `0/metadata.json`.
@@ -199,7 +201,7 @@ JSONL, one object per event, appended to `/home/claude/session-log.jsonl`.
 {"event":"user_turn","turn":1,"content":"<verbatim user message>","datetime":"<ISO8601>"}
 {"event":"agent_turn","turn":1,"content":"<verbatim agent response>","datetime":"<ISO8601>"}
 {"event":"tool_call","turn":1,"tool":"<name>","input":"<summary or full>","output":"<summary or full>","datetime":"<ISO8601>"}
-{"event":"file_write","path":"<path>","blake3":"<8-char>","bytes":<int>,"datetime":"<ISO8601>"}
+{"event":"file_write","path":"<path>","hash":"<8-char>","hash_algo":"blake3","bytes":<int>,"datetime":"<ISO8601>"}
 {"event":"session_end","turn_count":<int>,"duration_est":"<HH:MM>","commit_sha":"<sha>"}
 ```
 
