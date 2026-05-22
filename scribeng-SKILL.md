@@ -41,11 +41,11 @@ Derived from `entire` v0.6.1 reverse engineering (s08, 2026-05-18). Two files pe
 ### Path structure
 
 ```
-{cid[0:2]}/{cid[2:]}/metadata.json        # session-level summary
-{cid[0:2]}/{cid[2:]}/0/metadata.json      # incremental checkpoint (index 0)
+{cid[0:2]}/{cid[2:12]}/metadata.json      # session-level summary  (split: 2 + 10)
+{cid[0:2]}/{cid[2:12]}/0/metadata.json    # incremental checkpoint (index 0)
 ```
 
-Where `cid` = first 12 hex chars of the commit SHA on `entire/checkpoints/v1` for this checkpoint.
+Where `cid` = 12-char deterministic hex ID computed from session metadata (see step 7). Not derived from the commit SHA.
 
 ### `metadata.json` (session-level)
 
@@ -134,11 +134,11 @@ Where `cid` = first 12 hex chars of the commit SHA on `entire/checkpoints/v1` fo
 
 7. **Create checkpoint directory and write JSON files**:
    ```bash
-   # Deterministic CID: blake3(session_id + created_at + head_sha), first 16 chars
+   # Deterministic CID: blake3(session_id + created_at), first 12 chars
    # Fallback: md5sum if b3sum absent (change-detection only; emit hash_algo="md5" in file_write events)
-   CID=$(echo -n "<session_id><created_at><head_sha>" | b3sum | cut -c1-16 2>/dev/null \
-     || echo -n "<session_id><created_at><head_sha>" | md5sum | cut -c1-16)
-   mkdir -p ${CID:0:2}/${CID:2}/0
+   CID=$(printf '%s%s' "<session_id>" "<created_at>" | b3sum | cut -c1-12 2>/dev/null \
+     || printf '%s%s' "<session_id>" "<created_at>" | md5sum | cut -c1-12)
+   mkdir -p ${CID:0:2}/${CID:2:10}/0
    ```
    Write `metadata.json` (session-level) and `0/metadata.json` (incremental) with values from steps 1-5. Include `session_intent` in `0/metadata.json`.
 
@@ -150,15 +150,14 @@ Where `cid` = first 12 hex chars of the commit SHA on `entire/checkpoints/v1` fo
      --trailer "Signed-off-by: claude-subagent <claude-subagent@users.noreply.github.com>"
    ```
 
-8a. **Return to working branch and add trailer commit** (makes checkpoint discoverable via `entire checkpoint list`):
+8a. **Add trailer commit on the source branch** (makes checkpoint discoverable via `entire checkpoint list`):
+   The trailer must land on a commit reachable from the branch recorded in `metadata.json` `branch` field (typically `trunk` after a PR merge, or the working branch if work hasn't merged yet).
    ```bash
-   git checkout <working_branch>
    git commit --allow-empty \
-     --message "<working_branch>: link checkpoint <CID>" \
-     --trailer "Entire-Checkpoint: <CID>" \
-     --trailer "Signed-off-by: claude-subagent <claude-subagent@users.noreply.github.com>"
+     --message "link Entire checkpoint <CID>" \
+     --trailer "Entire-Checkpoint: <CID>"
    ```
-   Without this step, the checkpoint exists on the branch but is invisible to the Entire CLI and any compatible viewer.
+   Without this step, the checkpoint exists on `entire/checkpoints/v1` but is invisible to the Entire CLI and any compatible viewer.
 
 9. **Push if PAT available**:
     Push both `entire/checkpoints/v1` and working branch to remote using GIT_ASKPASS pattern. If no PAT, surface: "Checkpoint committed locally. Push entire/checkpoints/v1 and <working_branch> to remote when PAT available."
